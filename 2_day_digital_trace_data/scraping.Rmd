@@ -1,0 +1,636 @@
+---
+title: Day 2 -- Scraping lab
+subtitle: SICSS 2025
+author: Maël Lecoursonnais, Vsevolod Suschevskiy, Tangbin Chen
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  rmdformats::robobook:
+    thumbnails: false
+    self_contained: true
+    lightbox: true
+    gallery: true
+    bookdown: true
+    code_folding: show
+    df_print: paged
+    css: style.css
+editor_options:
+  chunk_output_type: console
+  markdown:
+    wrap: 72
+---
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+library(rvest)
+library(httr2)
+library(cli)
+library(stringr)
+library(purrr)
+library(dplyr)
+library(ggplot2)
+
+htmltools::tagList(
+  xaringanExtra::use_clipboard(
+    button_text = "<i class=\"fa fa-clipboard\"></i>",
+    success_text = "<i class=\"fa fa-check\" style=\"color: #90BE6D\"></i>",
+    error_text = "<i class=\"fa fa-times-circle\" style=\"color: #F94144\"></i>"
+  ),
+  rmarkdown::html_dependency_font_awesome()
+)
+```
+
+> This lab and the solutions are available here: <https://github.com/IAS-LiU/SICSS-2025>.
+
+Welcome to the lab material of the scraping workshop of SICSS-IAS 2025! 
+
+In this lab, we are going to see how to access data from the web. There are mainly two ways to do this: either by reading the HMTL code linked to a web page, or by accessing the data through an API.
+
+In both cases, we extract data in formats that are not directly readable by R, so we need to be able to convert those in desirable formats.
+
+During the lab, you will need to load some libraries. You can install and load them with the following code:
+```{r class.source = 'fold-hide', eval=FALSE, include=TRUE}
+list.of.packages <- c("rvest", "httr2", "cli", "stringr", "purrr", "dplyr", "ggplot2")
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages)
+
+library(rvest) #For HTML extraction
+library(httr2) #For APIs Requests and Process the Responses
+library(cli) #For command line interfaces
+library(stringr) #For string manipulation
+library(purrr) #For list manipulation
+library(dplyr) #For data manipulation
+library(ggplot2) #For plotting
+```
+
+**Things we are not covering today**
+
+Web scraping encompasses a lot of methods, and today we'll be focusing on simple cases. We will not cover user simulation (check `rvest::html_session`), `RSelenium`, or forms (check `rvest::html_form_set`). There is a ton of documentation on those if you want to dig more!
+
+# 01. Scraping the web from scratch
+
+Since most the web is written in HTML, scraping the web from scratch requires to know a little bit of HTML. So here's a HTML 101:
+
+## HTML 101
+
+> This section is taken from Felix Lennert's [CSS Toolbox bookdown](https://bookdown.org/f_lennert/book-toolbox_css/).
+
+Web content is usually written in HTML (**H**yper **T**ext **M**arkup **L**anguage). An HTML document is comprised of elements that are letting its content appear in a certain way.
+
+![The tree-like structure of an HTML document](https://www.w3schools.com/js/pic_htmltree.gif)
+
+The way these elements look is defined by so-called tags.
+
+The opening tag is the name of the element (`p` in this case) in angle brackets, and the closing tag is the same with a forward slash before the name. `p` stands for a paragraph element and would look like this (since RMarkdown can handle HTML tags, the second line will showcase how it would appear on a web page:
+
+`<p> My cat is very grumpy. <p/>`
+
+<p>
+
+My cat is very grumpy.
+
+<p/>
+
+The `<p>` tag makes sure that the text is standing by itself and that a line break is included thereafter:
+
+`<p>My cat is very grumpy</p>. And so is my dog.` would look like this:
+
+<p>My cat is very grumpy</p>
+
+. And so is my dog.
+
+There do exist many types of tags indicating different kinds of elements (about 100). Every page must be in an `<html>` element with two children `<head>` and `<body>`. The former contains the page title and some metadata, the latter the contents you are seeing in your browser. So-called **block tags**, e.g., `<h1>` (heading 1), `<p>` (paragraph), or `<ol>` (ordered list), structure the page. **Inline tags** (`<b>` -- bold, `<a>` -- link) format text inside block tags.
+
+You can nest elements, e.g., if you want to make certain things bold, you can wrap text in `<b>`:
+
+<p>My cat is <b> very </b> grumpy</p>
+
+Then, the `<b>` element is considered the *child* of the `<p>` element.
+
+Elements can also bear attributes.Those attributes will not appear in the actual content. Moreover, they are super-handy for us as scrapers. Here, `class` is the attribute name and `"editor-note"` the value. Another important attribute is `id`. Combined with CSS, they control the appearance of the element on the actual page. A `class` can be used by multiple HTML elements whereas an `id` is unique.
+
+## Read a webpage in R
+
+To read a webpage, we can use the `rvest` and `xml2` packages. `xml2::read_html` reads a HTML page from a URL or HTML file.
+
+Here's a depiction of the usual workflow:
+
+![](https://raw.githubusercontent.com/yusuzech/r-web-scraping-cheat-sheet/master/resources/functions_and_classes.png)
+
+Let's start with a minimal example:
+
+```{r}
+library(rvest) #Also loads xml2
+html_example <- minimal_html('
+    <html>
+    <head>
+      <title>Page title</title>
+    </head>
+    <body>
+      <h1 id="first">A heading</h1>
+      <p class="important">Some important text; <b>some bold text.</b></p>
+      
+      <h1>A second heading</h1>
+      <p id="link-sentence"> Another less important text that includes a <b><a href="https://example.com">link</a></b>. </p>
+      
+      <h2 class="important">Another heading</h2>
+      Text outside a paragraph, but with <a href="https://example.com">another link</a>.
+    </body>
+')
+```
+
+HTML pages are complex, and even in a simple example like the one above, it can be hard to navigate and the retrieve necessary information. This is where CSS selectors and XPath come to the rescue! CSS selectors and XPath are two different ways to access information on HTML pages. Today, we will only cover CSS selectors, but know XPath exists. It is a little bit more verbose, but it can be much more efficient.
+
+## CSS selectors
+
+This section was partly taken from [`rvest`'s documentation](https://rvest.tidyverse.org/articles/rvest.html).
+
+CSS is short for cascading style sheets, and is a tool for defining the visual styling of HTML documents. CSS includes a miniature language for selecting elements on a page called **CSS selectors**. CSS selectors define patterns for locating HTML elements, and are useful for scraping because they provide a concise way of describing which elements you want to extract.
+
+CSS selectors can be quite complex, but fortunately you only need the simplest for `rvest`, because you can also write R code for more complicated situations. The four most important selectors are:
+
+-   `p, a`: selects all `<p>` and `<a>` elements.
+
+-   `.title`: selects all elements with `class` "title".
+
+-   `p.special`: selects all `<p>` elements with `class` "special".
+
+-   `#title`: selects the element with the `id` attribute that equals "title". Id attributes must be unique within a document, so this will only ever select a single element.
+
+-   `p b`: selects all `<b>` nested in `<p>` elements.
+
+-   `[hello]`: selects all elements with a hello attribute.
+
+Check [here](https://www.w3schools.com/cssref/css_selectors.php) for more!
+
+If you don't know exactly what selector you need, I highly recommend using [SelectorGadget](https://rvest.tidyverse.org/articles/selectorgadget.html), which lets you automatically generate the selector you need by supplying positive and negative examples in the browser.
+
+## Exercice 1
+
+1.  Using `rvest::html_elements`, select all headings from `html_example`.
+2.  Select all elements with class "important".
+3.  Select all elements with id "first".
+4.  Select all headings with class "important".
+5.  Select all `title` and `p` elements.
+6.  Select all hyperlink elements that are nested in a paragraph.
+7.  Select all elements with an `id`.
+
+## Exercise 2
+
+The next step is to extract the text from the selected html elements. To get the text inside a tag, use `html_text` or `html_text2` (squeeze the blanks). To get the text inside an attribute, use `html_attr`.
+
+From `html_example`:
+
+1.  Get all the text.
+2.  Get all the links.
+
+## Exercise 3 -- Scraping a web page
+
+In this exercise, we are going to scrape a [Wikipedia page](https://en.wikipedia.org/wiki/List_of_cat_breeds).
+
+1.  Read the page.
+2.  Extract the table from the "Breeds" section (Hint: check `html_table` and ).
+3.  Get the names of all breeds and the URL to their Wikipedia page. Use regular expressions to remove information in parenthesis or brackets.(Hint: Here's a set of documentation you can use if you've never worked with regex: [1](https://evoldyn.gitlab.io/evomics-2018/ref-sheets/R_strings.pdf), [2](https://bookdown.org/f_lennert/book-toolbox_css/digital-trace-data.html#regular-expressions), [3](https://www.datacamp.com/cheat-sheet/regular-expresso).)
+4.  Check the "Coat type and length column". Which are the most common? Least common?
+
+For this exercise, feel free to use the [Selector Gadget](javascript:(function()%7Bvar%20s=document.createElement('div');s.innerHTML='Loading...';s.style.color='black';s.style.padding='20px';s.style.position='fixed';s.style.zIndex='9999';s.style.fontSize='3.0em';s.style.border='2px%20solid%20black';s.style.right='40px';s.style.top='40px';s.setAttribute('class','selector_gadget_loading');s.style.background='white';document.body.appendChild(s);s=document.createElement('script');s.setAttribute('type','text/javascript');s.setAttribute('src','https://dv0akt2986vzh.cloudfront.net/unstable/lib/selectorgadget.js');document.body.appendChild(s);%7D)();) -- just drag it into your bookmarks list.
+
+```{r}
+url <- "https://en.wikipedia.org/wiki/List_of_cat_breeds"
+```
+
+# 02. APIs to the rescue
+
+APIs (application programming interfaces) are sets of rules that allow different pieces of software to communicate and interact with each other. APIs define the way via which information and data can be exchanged between systems. They are usually not built to be used by an end-user, but rather to be incorporated into another piece of software.
+
+In CSS, we encounter APIs usually when we would like to scrape some information for our analyses from the internet or post some information in automated manner. In the next exercise, we will work with the Bluesky API and get to know different ways how it can be accessed. [Here](https://docs.bsky.app/docs/category/http-reference) you can find the official documentation. To make the start a little bit easier, we listed some terminology:
+
+-   Endpoint: An API usually has different endpoints depending on which type of information one wants to retrieve.
+-   HTTP Methods: They are used to perform different operations on the endpoint, such as `Get` (get data), `POST` (send data), `PUT` (send updates), `DELETE` (delete data).
+-   Requests: HTTP requests are sent to a specific endpoint when querying an API. You can either formulate such a statement yourself, or you can try to find a package that does this for you ;)
+-   Response: APIs respond to a request with a HTTP response. The response usually contains a status message, meta data, as well as the requested piece of information or an error message. Most often, API responses come in JSON or XML format.
+-   Authentication: APIs often require an authentication to ensure secure access.
+-   Rate Limit: Most APIs come with an rate limit (i.e. only so and so many requests are allowed to be sent per time unit).
+
+## Guided exercise -- Get followers
+
+Let's try to formulate an HTTP request ourselves and send it to the Bluesky API. The `httr2` package will help us with this. You can install it via `install.packages("httr2")` and attach it via `library(httr2)`. [On this website](https://docs.bsky.app/docs/api/app-bsky-actor-get-profile) you can explore how the Bluesky API works for requesting profiles. The API returns did, handle, displayName, description, followersCount, followsCount, postsCount and many other information for users, posts, lists, etc. `did` is a unique ID that Bluesky uses to identify users.
+
+Firstly, you will have to set up a Bluesky account and create an app password. You can do this [here](https://bsky.app/settings/app-passwords). Then, you will have to set up your environment variables (in your `.Renviron` file). They should look like this: 
+```
+BLUESKY_APP_USER=user.bsky.social 
+BLUESKY_APP_PASS=apppassword
+```
+You can do this by running the following code in R:
+
+```{r libraries #1, eval=FALSE, include=TRUE}
+usethis::edit_r_environ()
+
+Sys.getenv("BLUESKY_APP_USER")
+Sys.getenv("BLUESKY_APP_PASS")
+```
+
+Take a look at this somewhat complicated function that retrieves followers of a given Bluesky user. It uses the `httr2` package to send an HTTP request to the Bluesky API and returns the followers in a tidy format.
+
+Firstly, it creates an authentication token using the `create_auth` function. This function sends a request to the Bluesky API to create a session using the provided username and password. The authentication token is then used to authorize the request to get followers.
+
+```{r echo=T, results='hide'}
+create_auth <- function(
+    user = Sys.getenv("BLUESKY_APP_USER"), 
+    pass = Sys.getenv("BLUESKY_APP_PASS")) {
+  
+  #Build the request
+  req <- httr2::request('https://bsky.social/xrpc/com.atproto.server.createSession') |>
+    httr2::req_body_json(
+      data = list(
+        identifier = user, password = pass
+      )
+    )
+  
+  #Send the request (`req_perform`) and 
+  #fetch the result in parsed JSON (`resp_body_json`)
+  out <- req |>
+    httr2::req_perform() |>
+    httr2::resp_body_json() |>
+    invisible()
+
+  out$bskyr_created_time <- lubridate::now()
+
+  out
+}
+
+my_auth <- create_auth(
+  Sys.getenv("BLUESKY_APP_USER"), 
+  Sys.getenv("BLUESKY_APP_PASS")
+)
+
+my_auth$accessJwt
+```
+
+Secondly, the `get_followers` function is defined. It takes the actor (user handle), limit (number of followers to retrieve), and authentication parameters. It sends a request to the Bluesky API to get the followers of the specified user. We work with the https://docs.bsky.app/docs/api/app-bsky-graph-get-followers endpoint.
+
+```{r}
+get_followers <- 
+  function(actor, limit = NULL,
+           user = Sys.getenv("BLUESKY_APP_USER"), 
+           pass = Sys.getenv("BLUESKY_APP_PASS"), 
+           auth = create_auth(user, pass)) {
+  
+  # Set up the limit
+  if (!is.null(limit)) {
+    limit <- as.integer(limit)
+    limit <- max(limit, 1L)
+  # separate requests into chunks of 100
+    req_seq <- diff(unique(c(seq(0, limit, 100), limit)))
+  } else {
+    req_seq <- list(NULL)
+  }
+  
+  # Build the request
+  req <- 
+    # Endpoint
+    httr2::request('https://bsky.social/xrpc/app.bsky.graph.getFollowers') |>
+    # Modifies url to add actor
+    httr2::req_url_query(actor = actor) |>
+    # Add authentification information (created with `create_auth`)
+    httr2::req_auth_bearer_token(token = auth$accessJwt) |>
+    # Modifies url to add limit
+    httr2::req_url_query(limit = limit)
+
+  # This function sends the request and repeat it if limit > 100
+  repeat_request <- function(req, req_seq, txt = 'Fetching data') {
+    resp <- vector(mode = 'list', length = length(req_seq))
+    
+    for (i in cli::cli_progress_along(req_seq, txt)) {
+      resp[[i]] <- req |>
+        httr2::req_url_query(limit = req_seq[[i]]) |>
+        httr2::req_perform() |>
+        httr2::resp_body_json()
+    }
+  
+    # Discard NULL responses
+    resp |>
+      purrr::discard(is.null)
+  }
+  
+  # Apply function
+  resp <- repeat_request(req, req_seq, txt = 'Fetching followers')
+}
+```
+
+This is what we will end up with when querying the API with `hadley.nz`'s followers:
+```{r}
+get_followers(actor = "hadley.nz", 
+              user = Sys.getenv("BLUESKY_APP_USER"), 
+              pass = Sys.getenv("BLUESKY_APP_PASS"), 
+              limit = 1000) -> followers
+
+followers |> 
+  first() |> 
+  first() |> 
+  first()
+```
+
+Not so tidy right? Let's clean the response and return a tidy data frame with the followers' information. The `clean_names` function is used to clean the column names, and the `process_followers` function processes the response to extract the relevant information. 
+
+```{r}
+followers_clean <- function(followers) {
+  
+  # This function cleans the names of the columns in the response
+  clean_names <- function(x) {
+    out <- x |>
+      names() |>
+      stringr::str_replace('\\.', '_') |>
+      stringr::str_replace('([a-z])([A-Z])', '\\1_\\2') |>
+      tolower()
+    stats::setNames(object = x, nm = out)
+  }
+  
+  # This function processes the response to extract the relevant information
+    proc <- function(l) {
+    lapply(l, function(z) unlist(z)) |>
+      dplyr::bind_rows() |>
+      clean_names()
+  }
+
+  # This function processes the response to extract the followers and their subjects
+  process_followers <- function(resp) {
+  dplyr::bind_cols(
+    resp |>
+      purrr::pluck('followers') |> # Extract the followers
+      proc() |> # Process the followers
+      clean_names(),
+    resp |>
+      purrr::pluck('subject') |>
+      unlist() |>
+      dplyr::bind_rows() |>
+      clean_names() |>
+      # Extract the subjects and rename the columns
+      dplyr::rename_with(.fn = function(x) paste0('subject_', x))
+    )
+  }
+
+  followers |>
+    lapply(process_followers) |>  # Process each response
+    purrr::list_rbind() # Bind the results into a single data frame
+}
+
+followers_df <- followers_clean(followers)
+
+followers_df |> 
+  head()
+```
+
+## Exercise 4 -- Get follows
+
+Look at the `get_followers` function above. It is a function that retrieves the followers of a given Bluesky user. In this exercise, we will take a look at a user's follows (the other user they follow). Look at the Bluesky API documentation <https://docs.bsky.app/docs/api/app-bsky-graph-get-follows>. 
+
+1. Write a function to get the list of other users a given user follows.
+
+```{r get_follows, eval=FALSE}
+get_follows <- 
+  function(actor, limit = NULL,
+           user = Sys.getenv("BLUESKY_APP_USER"), 
+           pass = Sys.getenv("BLUESKY_APP_PASS"), 
+           auth = create_auth(user, pass)) {
+    
+    # Your code here
+    
+}
+```
+
+To clean the data, let's re-use the `clean_followers` function and tweak a few things.
+
+```{r eval=FALSE}
+follows_clean <- function(follows){
+  # Your code here
+}
+```
+
+Let's create a function that combines both, and test it on `hadley.nz`:
+```{r eval=FALSE}
+get_follows_clean <- function(...){
+  get_follows(...) |> 
+    follows_clean()
+}
+
+follows_df <- get_follows_clean(
+  #...
+)
+```
+
+2. Use the `get_follows` function you just wrote and get the *follows of the follows* of a user of your choice.
+
+Note: Use `slowly` with `rate = rate_delay(2)` to avoid being soft banned by the API. Look at the [rate limits of Blueky](https://docs.bsky.app/docs/advanced-guides/rate-limits) to see how many requests you can make per minute.
+
+```{r eval=FALSE, class.source = 'fold-hide'}
+# Function for slower scraping
+slow_collect <- 
+  get_follows_clean |> 
+  purrr::slowly(rate = purrr::rate_delay(2))
+
+# This will take at least 5 minutes, so be patient!
+follows_df_full <- 
+  follows_df |> 
+  head(100) |>
+  pull(handle) |> 
+  unique() |> 
+  set_names() |> 
+  map(slow_collect, limit = 1000) |> 
+  list_rbind(names_to = "original_handle") |> 
+  collapse::funique()
+
+# Save the data
+saveRDS(follows_df_full, "follows_of_follows.Rds")
+```
+
+3. Visualize the network of follows using `ggraph` and `tidygraph`. Create a network of co-followings. What do you see? Are there any clusters of users that follow each other? Are there any users that are not connected to the rest of the network?
+
+```{r eval=FALSE, class.source = 'fold-hide'}
+follows_df_full |> 
+  select(original_handle, handle) |> 
+  igraph::graph_from_data_frame() |> 
+  tidygraph::as_tbl_graph() |> 
+  tidygraph::activate(nodes) |> 
+  mutate(degree = tidygraph::centrality_degree()) |> 
+  filter(degree > 0) |>
+  ggraph::ggraph() +
+  ggraph::geom_edge_link() +
+  ggraph::geom_node_point() +
+  ggplot2::theme_void() 
+```
+
+## Exercise 5
+
+Writing HTTP requests can be a bit fiddly sometimes. There, however, is help! For many often queried APIs R (or Python) packages are available, which can make life a bit easier. One package for the Bluesky API is called `bskyr` (which you can install from GitHub with `remotes::install_github("christopherkenny/bskyr")`). 
+
+```{r libraries #2}
+#remotes::install_github("christopherkenny/bskyr")
+library(bskyr)
+```
+
+Let's setup the `bskyr` authentication. You will need to set up your environment variables in your `.Renviron` file. This will be a repetition of steps we did before, but this time we will use the `bskyr` package to make it easier.
+
+```{r bluesky_setup, eval=FALSE, include=TRUE}
+set_bluesky_user(Sys.getenv("BLUESKY_APP_USER"))
+set_bluesky_pass(Sys.getenv("BLUESKY_APP_PASS"))
+
+get_bluesky_user()
+get_bluesky_pass()
+```
+
+Let's take a look at a post and its replies. We will use `bs_get_posts` to get the post's unique id `uri`, and `bs_get_post_thread` to get the thread of the post. We will also extract the authors of the replies using a recursive function.
+
+```{r class.source = 'fold-hide'}
+post <- bs_get_posts('https://bsky.app/profile/therickydavila.bsky.social/post/3lpxumxazzk2v')
+
+thread <-
+  post |> 
+  pull(uri) |> 
+  bs_get_post_thread(depth = 1000)
+
+replies_df <- 
+  thread |> 
+  pull(replies) |> 
+  first() |> 
+  purrr::map_dfr(
+    \(list_item) {
+      tibble::tibble(
+        did = pluck(list_item, "post", "author", "did", .default = NA_character_),
+        handle = pluck(list_item, "post", "author", "handle", .default = NA_character_),
+        displayName = pluck(list_item, "post", "author", "displayName", .default = NA_character_),
+        text = pluck(list_item, "post", "record", "text", .default = NA_character_)
+    )
+  })
+
+replies_df |> 
+  head(20)
+  
+# Recursive function to extract authors from a post item and its replies
+extract_all_authors_recursive <- function(post_item) {
+  
+  # 1. Extract author from the current post_item's post
+  # Assumes post_item has a $post$author structure.
+  # If fields are missing, pluck will return NA due to .default.
+  current_author_df <- tibble::tibble(
+    did = purrr::pluck(post_item, "post", "author", "did", .default = NA_character_),
+    handle = purrr::pluck(post_item, "post", "author", "handle", .default = NA_character_),
+    displayName = purrr::pluck(post_item, "post", "author", "displayName", .default = NA_character_),
+    text = pluck(post_item, "post", "record", "text", .default = NA_character_)
+  )
+
+  # Initialize a list to hold data frames to be combined. Start with the current post's author.
+  dfs_to_combine <- list(current_author_df)
+
+  # 2. Process replies recursively
+  # Get the list of replies for the current item
+  replies_list <- purrr::pluck(post_item, "replies") 
+
+  if (!is.null(replies_list) && length(replies_list) > 0) {
+    # If there are replies, apply this function to each reply
+    # map_dfr will call extract_all_authors_recursive for each reply
+    # and row-bind their results into a single data frame.
+    replies_authors_df <- purrr::map_dfr(replies_list, extract_all_authors_recursive)
+
+    # Add the data frame of authors from replies to our list (if it's not empty)
+    if (nrow(replies_authors_df) > 0) {
+      dfs_to_combine[[length(dfs_to_combine) + 1]] <- replies_authors_df
+    }
+  }
+
+  # 3. Combine the current author's data with data from all replies
+  return(purrr::list_rbind(dfs_to_combine))
+}
+
+all_extracted_authors <- thread |> 
+  pull(replies) |> 
+  first() |> 
+  purrr::map_dfr(extract_all_authors_recursive)
+```
+
+Let's visualize the replies as a network graph. We will use `tidygraph` and `ggraph` to create a network graph of the replies. The nodes will be the authors, and the edges will be the replies between them. What can you say about the network? Why do you think it looks like this? Is it a directed or undirected network? What does that mean?
+
+```{r class.source = 'fold-hide', message=FALSE, warning=FALSE}
+library(tidygraph)
+
+all_extracted_authors |> 
+  select(handle) |> 
+  mutate(to = lag(handle)) |> 
+  na.omit() |> 
+  rename(from = handle)-> replies_df
+
+#replies_df
+
+replies_df |> 
+  igraph::graph_from_data_frame(directed = TRUE) |> 
+  tidygraph::as_tbl_graph() |> 
+  tidygraph::activate(nodes) |> 
+  mutate(degree = centrality_degree()) |> 
+  filter(degree > 0) |> 
+  ggraph::ggraph() +
+  ggraph::geom_edge_link() +
+  ggraph::geom_node_point() +
+  theme_void()
+```
+
+Lastly, let's extract the text of the replies and create a word histogram. We will use `tidytext` to create a tidy text data frame, and `ggplot2` to create the histogram. We will also use `dplyr` to filter the text data frame to only include the replies.
+
+```{r class.source = 'fold-hide', message=FALSE, warning=FALSE}
+library(tidytext)
+
+all_extracted_authors |> 
+  unnest_tokens(word, text) |> 
+  count(word, sort = TRUE) |> 
+  filter(!word %in% stop_words$word) |> 
+  head(20) |> 
+  ggplot(aes(x = reorder(word, n), y = n)) +
+  geom_col() +
+  coord_flip() +
+  labs(x = NULL, y = "Count", title = "Most common words in replies")+
+  theme_minimal()+
+  theme(axis.text.y = element_text(hjust = 0))
+```
+
+Sometimes individual words are not enough, and we want to look at the context in which they appear. In this case, we can use n-grams to extract sequences of words. Let's extract the most common bigrams (sequences of two words) from the replies. We will not explain the code in detail, since you will learn more about text analysis later this week.
+
+```{r class.source = 'fold-hide', message=FALSE, warning=FALSE}
+all_extracted_authors |> 
+  unnest_tokens(bigram, text, token = "ngrams", n = 2) |> 
+    na.omit() |> 
+  count(bigram, sort = TRUE) |> 
+  tidyr::separate(bigram, into = c("word1", "word2"), sep = " ") |> 
+  filter(!word1 %in% stop_words$word) |>
+  filter(!word2 %in% stop_words$word) |>
+  mutate(bigram = paste(word1, word2)) |>
+  select(-word1, -word2) |>
+  filter(n> 2) |> 
+  ggplot(aes(x = reorder(bigram, n), y = n)) +
+  geom_col() +
+  coord_flip() +
+  labs(x = NULL, y = "Count", title = "Most common bigrams in replies")+
+  theme_minimal()+
+  theme(axis.text.y = element_text(hjust = 0))
+```
+
+And as a sort of a teaser for the social network analysis lab, we can also visualize the co-occurrence of words in the replies. This will give us an idea of which words are often used together in the replies. We will use `tidygraph` and `ggraph` to create a network graph of the co-occurring words. The nodes will be the words, and the edges will be the co-occurrences between them.
+
+```{r class.source = 'fold-hide', message=FALSE, warning=FALSE}
+all_extracted_authors |> 
+  unnest_tokens(skipgram, text, token = "skip_ngrams", n = 2, k = 5) |> 
+    na.omit() |> 
+  count(skipgram, sort = TRUE) |> 
+  tidyr::separate(skipgram,into = c("word1", "word2"), sep = " ") |> 
+  filter(!word1 %in% stop_words$word) |>
+  filter(!word2 %in% stop_words$word) |>
+  select(word1, word2) |> 
+  igraph::graph_from_data_frame(directed = TRUE) |>
+  tidygraph::as_tbl_graph() |>
+  tidygraph::activate(nodes) |> 
+  mutate(degree = tidygraph::centrality_degree()) |> 
+  filter(degree > 10) |> 
+  ggraph::ggraph() +
+  ggraph::geom_edge_link() +
+  # ggraph::geom_node_point() +
+  ggraph::geom_node_label(aes(label = name), repel = F) +
+  theme_void()
+```
+
+Well done, you reached the end of the lab!
