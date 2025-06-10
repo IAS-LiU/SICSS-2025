@@ -766,10 +766,24 @@ all_extracted_authors |>
   mutate(degree = tidygraph::centrality_degree()) |> 
   filter(degree > 10) |> 
   ggraph::ggraph() +
-  ggraph::geom_edge_link() +
+  ggraph::geom_edge_link(color = "gray") +
   # ggraph::geom_node_point() +
   ggraph::geom_node_label(aes(label = name), repel = F) +
   theme_void()
 ```
 
 Well done, you reached the end of the lab!
+
+### Tweet about it!
+
+Use bskr library to post your reflection to Bluesky. You can use the following code to post a tweet:
+
+```{r eval=FALSE}
+
+bs_post(
+  text = "I just completed the SICSS-IAS 2025 digital traces lab hosted by @iasliu.bsky.social. I made this tweet using the bskyr library in R. Kudos to @chriskenny.bsky.social for creating and maintaining it! I will leave all hashtags here: #SICSS #SICSS-IAS #IAS.",
+  user = Sys.getenv("BLUESKY_APP_USER"),
+  pass = Sys.getenv("BLUESKY_APP_PASS")
+)
+
+```
