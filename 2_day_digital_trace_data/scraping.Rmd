@@ -296,12 +296,17 @@ get_followers <-
     httr2::req_url_query(limit = limit)
 
   # This function sends the request and repeat it if limit > 100
-  repeat_request <- function(req, req_seq, txt = 'Fetching data') {
+ repeat_request <- function(req, req_seq, txt = 'Fetching data') {
     resp <- vector(mode = 'list', length = length(req_seq))
-    
     for (i in cli::cli_progress_along(req_seq, txt)) {
+      
+      cursor <- if (i == 1) {
+        NULL
+        } else {
+        resp[[i-1]]$cursor # Get the cursor from the previous response and resume from there
+        }
       resp[[i]] <- req |>
-        httr2::req_url_query(limit = req_seq[[i]]) |>
+        httr2::req_url_query(limit = req_seq[[i]], cursor = cursor) |>
         httr2::req_perform() |>
         httr2::resp_body_json()
     }
