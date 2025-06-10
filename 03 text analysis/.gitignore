@@ -1,0 +1,6 @@
+# Ignore the Active Learning model finetuning checkpoints
+model
+# Ignore the final model
+finetuned_model
+# Ignore the final predictions
+AL_predictions.tsv
