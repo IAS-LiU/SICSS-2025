@@ -1,5 +1,5 @@
 ---
-title: Day 2 -- Scraping lab
+title: Day 2 -- Scraping lab (with answers)
 subtitle: SICSS 2025
 author: Maël Lecoursonnais, Vsevolod Suschevskiy, Tangbin Chen
 date: "`r format(Sys.time(), '%d %B, %Y')`"
@@ -118,7 +118,7 @@ Here's a depiction of the usual workflow:
 Let's start with a minimal example:
 
 ```{r}
-library(rvest) #Also loads xml2
+library(rvest) #Also loads `xml2`
 html_example <- minimal_html('
     <html>
     <head>
@@ -173,6 +173,29 @@ If you don't know exactly what selector you need, I highly recommend using [Sele
 6.  Select all hyperlink elements that are nested in a paragraph.
 7.  Select all elements with an `id`.
 
+```{r eval=FALSE}
+#1. A comma for several tags
+html_elements(html_example, "h1, h2")
+
+#2. A dot for the class
+html_elements(html_example, ".important")
+
+#3. A hash for an id
+html_elements(html_example, "#first")
+
+#4. Combination of tag and class
+html_elements(html_example, "h2.important")
+
+#5. A comma again
+html_elements(html_example, "title, p")
+
+#6. A blank for nested elements
+html_elements(html_example, "p a")
+
+#7. Square brackets for a target attribute
+html_elements(html_example, "[id]")
+```
+
 ## Exercise 2
 
 The next step is to extract the text from the selected html elements. To get the text inside a tag, use `html_text` or `html_text2` (squeeze the blanks). To get the text inside an attribute, use `html_attr`.
@@ -181,6 +204,22 @@ From `html_example`:
 
 1.  Get all the text.
 2.  Get all the links.
+
+```{r}
+#1.
+html_example %>% 
+  #Text is situated in the head and the body
+  html_elements("head, body") %>% 
+  #html_text2 to extract the text
+  html_text2()
+
+#2.
+html_example %>% 
+  #a tags refer to hyperlinks
+  html_elements("a") %>% 
+  #href is the attribute for the hyperlink
+  html_attr("href")
+```
 
 ## Exercise 3 -- Scraping a web page
 
@@ -195,6 +234,38 @@ For this exercise, feel free to use the [Selector Gadget](javascript:(function()
 
 ```{r}
 url <- "https://en.wikipedia.org/wiki/List_of_cat_breeds"
+
+#1.
+wp <- read_html(url)
+
+#2. 
+tab <- 
+  wp %>% 
+  #Select the table elements with class wikitable. 
+  html_element("table") %>% 
+  #Turn into a R data.frame with `html_table` 
+  html_table()
+
+#3.
+#Extract the breeds from the table. 
+breeds <- gsub("(.*)[\n|\\[].*", "\\1", tab$Breed)
+
+#With the selector gadget, you can isolate the right css selector to get the 
+#recipients column, including the links (not possible with `html_table`).
+links <- 
+  wp %>%
+  html_elements(".wikitable th:nth-child(1) a[title]")
+
+data.frame(
+  title = html_attr(links, "title"),
+  href = html_attr(links, "href")
+)
+
+#4. 
+tab |> 
+  dplyr::mutate(`Coat type and length` = stringr::str_trim(gsub("(.*)[\\(|\\[].*", "\\1", `Coat type and length`))) |> 
+  collapse::fcount(`Coat type and length`) |> 
+  dplyr::arrange(-N)
 ```
 
 # 02. APIs to the rescue
@@ -385,43 +456,109 @@ Look at the `get_followers` function above. It is a function that retrieves the 
 
 1. Write a function to get the list of other users a given user follows.
 
-```{r get_follows, eval=FALSE}
+We can copy-paste the `get_followers` and change the endpoint, and bam!
+```{r get_follows}
 get_follows <- 
   function(actor, limit = NULL,
            user = Sys.getenv("BLUESKY_APP_USER"), 
            pass = Sys.getenv("BLUESKY_APP_PASS"), 
            auth = create_auth(user, pass)) {
+  
+  if (!is.null(limit)) {
+    limit <- as.integer(limit)
+    limit <- max(limit, 1L)
+    req_seq <- diff(unique(c(seq(0, limit, 100), limit)))
+  } else {
+    req_seq <- list(NULL)
+  }
+  
+  req <- 
+    httr2::request('https://bsky.social/xrpc/app.bsky.graph.getFollows') |>
+    httr2::req_url_query(actor = actor) |>
+    httr2::req_auth_bearer_token(token = auth$accessJwt) |>
+    httr2::req_url_query(limit = limit)
+
+  repeat_request <- function(req, req_seq, txt = 'Fetching data') {
+    resp <- vector(mode = 'list', length = length(req_seq))
     
-    # Your code here
+    for (i in cli::cli_progress_along(req_seq, txt)) {
+      resp[[i]] <- req |>
+        httr2::req_url_query(limit = req_seq[[i]]) |>
+        httr2::req_perform() |>
+        httr2::resp_body_json()
+    }
     
+    resp |>
+      purrr::discard(is.null) |> 
+      purrr::modify_tree(pre = ~ discard_at(.x, c("verification", "labels")))
+  }
+  
+  resp <- repeat_request(req, req_seq, txt = 'Fetching follows') 
 }
 ```
 
 To clean the data, let's re-use the `clean_followers` function and tweak a few things.
-
-```{r eval=FALSE}
+```{r}
 follows_clean <- function(follows){
-  # Your code here
+  
+  clean_names <- function(x) {
+    out <- x |>
+      names() |>
+      stringr::str_replace('\\.', '_') |>
+      stringr::str_replace('([a-z])([A-Z])', '\\1_\\2') |>
+      tolower()
+    stats::setNames(object = x, nm = out)
+  }
+  
+  proc <- function(l) {
+    l |> 
+      lapply(function(z) unlist(z)) |>
+      dplyr::bind_rows() |>
+      clean_names()
+  }
+
+  process_follows <- function(resp) {
+    dplyr::bind_cols(
+      resp |>
+        purrr::pluck('follows') |>
+        proc() |>
+        clean_names(),
+      resp |>
+        purrr::pluck('subject') |>
+        unlist() |>
+        dplyr::bind_rows() |>
+        clean_names() |>
+        dplyr::rename_with(.fn = function(x) paste0('subject_', x))
+    )
+  }
+
+  follows |>
+    lapply(process_follows) |>
+    purrr::list_rbind()
 }
 ```
 
 Let's create a function that combines both, and test it on `hadley.nz`:
-```{r eval=FALSE}
+```{r}
 get_follows_clean <- function(...){
   get_follows(...) |> 
     follows_clean()
 }
 
-follows_df <- get_follows_clean(
-  #...
-)
+follows_df <- get_follows_clean(actor = "hadley.nz", 
+            user = Sys.getenv("BLUESKY_APP_USER"), 
+            pass = Sys.getenv("BLUESKY_APP_PASS"), 
+            limit = 1000)
+
+follows_df |> 
+  head()
 ```
 
 2. Use the `get_follows` function you just wrote and get the *follows of the follows* of a user of your choice.
 
 Note: Use `slowly` with `rate = rate_delay(2)` to avoid being soft banned by the API. Look at the [rate limits of Blueky](https://docs.bsky.app/docs/advanced-guides/rate-limits) to see how many requests you can make per minute.
 
-```{r eval=FALSE, class.source = 'fold-hide'}
+```{r eval=FALSE, include=TRUE}
 # Function for slower scraping
 slow_collect <- 
   get_follows_clean |> 
@@ -430,7 +567,7 @@ slow_collect <-
 # This will take at least 5 minutes, so be patient!
 follows_df_full <- 
   follows_df |> 
-  head(100) |>
+  head(50) |>
   pull(handle) |> 
   unique() |> 
   set_names() |> 
@@ -444,7 +581,7 @@ saveRDS(follows_df_full, "follows_of_follows.Rds")
 
 3. Visualize the network of follows using `ggraph` and `tidygraph`. Create a network of co-followings. What do you see? Are there any clusters of users that follow each other? Are there any users that are not connected to the rest of the network?
 
-```{r class.source = 'fold-hide', warning=FALSE, message=FALSE}
+```{r}
 follows_df_full <- readRDS("follows_of_follows.Rds")
 
 follows_df_full |> 
@@ -481,7 +618,7 @@ get_bluesky_pass()
 
 Let's take a look at a post and its replies. We will use `bs_get_posts` to get the post's unique id `uri`, and `bs_get_post_thread` to get the thread of the post. We will also extract the authors of the replies using a recursive function.
 
-```{r class.source = 'fold-hide'}
+```{r}
 post <- bs_get_posts('https://bsky.app/profile/therickydavila.bsky.social/post/3lpxumxazzk2v')
 
 thread <-
@@ -550,7 +687,7 @@ all_extracted_authors <- thread |>
 
 Let's visualize the replies as a network graph. We will use `tidygraph` and `ggraph` to create a network graph of the replies. The nodes will be the authors, and the edges will be the replies between them. What can you say about the network? Why do you think it looks like this? Is it a directed or undirected network? What does that mean?
 
-```{r class.source = 'fold-hide', message=FALSE, warning=FALSE}
+```{r}
 library(tidygraph)
 
 all_extracted_authors |> 
@@ -559,7 +696,7 @@ all_extracted_authors |>
   na.omit() |> 
   rename(from = handle)-> replies_df
 
-#replies_df
+replies_df
 
 replies_df |> 
   igraph::graph_from_data_frame(directed = TRUE) |> 
@@ -575,7 +712,7 @@ replies_df |>
 
 Lastly, let's extract the text of the replies and create a word histogram. We will use `tidytext` to create a tidy text data frame, and `ggplot2` to create the histogram. We will also use `dplyr` to filter the text data frame to only include the replies.
 
-```{r class.source = 'fold-hide', message=FALSE, warning=FALSE}
+```{r}
 library(tidytext)
 
 all_extracted_authors |> 
@@ -593,7 +730,7 @@ all_extracted_authors |>
 
 Sometimes individual words are not enough, and we want to look at the context in which they appear. In this case, we can use n-grams to extract sequences of words. Let's extract the most common bigrams (sequences of two words) from the replies. We will not explain the code in detail, since you will learn more about text analysis later this week.
 
-```{r class.source = 'fold-hide', message=FALSE, warning=FALSE}
+```{r}
 all_extracted_authors |> 
   unnest_tokens(bigram, text, token = "ngrams", n = 2) |> 
     na.omit() |> 
@@ -614,7 +751,7 @@ all_extracted_authors |>
 
 And as a sort of a teaser for the social network analysis lab, we can also visualize the co-occurrence of words in the replies. This will give us an idea of which words are often used together in the replies. We will use `tidygraph` and `ggraph` to create a network graph of the co-occurring words. The nodes will be the words, and the edges will be the co-occurrences between them.
 
-```{r class.source = 'fold-hide', message=FALSE, warning=FALSE}
+```{r}
 all_extracted_authors |> 
   unnest_tokens(skipgram, text, token = "skip_ngrams", n = 2, k = 5) |> 
     na.omit() |> 
