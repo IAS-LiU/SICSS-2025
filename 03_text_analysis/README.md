@@ -23,3 +23,20 @@ If you are new to Python, and would like to familiarise yourself with it, there 
 * [Python-Beginners-Guide](https://github.com/jamwine/Python-Beginners-Guide/blob/master/Learn%20Python%20in%20Jupyter%20Notebook.ipynb)
 * [Learning Python 3](https://mybinder.org/v2/gist/kenjyco/69eeb503125035f21a9d/HEAD?filepath=learning-python3.ipynb) from [here](https://gist.github.com/kenjyco/69eeb503125035f21a9d). This one you can run directly in your browser without having to install anything.
 
+
+## Quick Colab tutorial:
+
+### Setup
+* Go to https://colab.research.google.com/
+* Click "File" > "Open notebook..."
+* A dialog will appear, click the GitHub tab
+* Paste the URL of this GitHub repo: https://github.com/IAS-LiU/SICSS-2025
+* Press Enter, and you’ll see a list of notebooks from that repo
+* Click the one you want to open from the `03_text_analysis` directory
+
+### Install packages
+In Colab, you need an exclamation mark "!" before your install command.
+To install a package:
+* Insert a new code cell using the button "+ Code" (top left)
+* Write your pip command with an exclamation mark at the beginning (e.g., `!pip install evaluate`)
+* Run the cell
