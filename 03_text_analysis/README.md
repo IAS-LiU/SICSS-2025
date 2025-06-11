@@ -18,6 +18,7 @@ Analysis. It conains a set of files, outlined below:
   Use them to guide yourself to implementing the correct code and seeing how the
   methods are implemented.
 
+## On Python for Beginners:
 
 If you are new to Python, and would like to familiarise yourself with it, there are some really good tutorials for beginners already out there -- here are two you could take a look at
 * [Python-Beginners-Guide](https://github.com/jamwine/Python-Beginners-Guide/blob/master/Learn%20Python%20in%20Jupyter%20Notebook.ipynb)
@@ -40,3 +41,6 @@ To install a package:
 * Insert a new code cell using the button "+ Code" (top left)
 * Write your pip command with an exclamation mark at the beginning (e.g., `!pip install evaluate`)
 * Run the cell
+
+## MISC:
+[Poster on Transformers](https://hendrik-erz.de/post/the-transformer-architecture-a-visual-guide-pdf-download)
