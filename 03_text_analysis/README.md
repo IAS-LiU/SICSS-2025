@@ -19,9 +19,7 @@ Analysis. It conains a set of files, outlined below:
   methods are implemented.
 
 
-If you are new to Python, and would like to familiarise yourself with it
-
-There are some really good Tutorials for beginners already out there -- here are two you could take a look at
+If you are new to Python, and would like to familiarise yourself with it, there are some really good tutorials for beginners already out there -- here are two you could take a look at
 * [Python-Beginners-Guide](https://github.com/jamwine/Python-Beginners-Guide/blob/master/Learn%20Python%20in%20Jupyter%20Notebook.ipynb)
 * [Learning Python 3](https://mybinder.org/v2/gist/kenjyco/69eeb503125035f21a9d/HEAD?filepath=learning-python3.ipynb) from [here](https://gist.github.com/kenjyco/69eeb503125035f21a9d)
 
