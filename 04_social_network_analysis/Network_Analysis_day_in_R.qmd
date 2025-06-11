@@ -1,6 +1,6 @@
 ---
 title: '# SICSS Norrköping 2025: Network Analysis (EXERCISE SHEET)'
-author: "Alexandra Rottenkolber, updated by Vsevolod Suschevskiy"
+author: "Alexandra Rottenkolber, Vsevolod Suschevskiy, Tangbin Chen"
 date: "2025-06-12"
 format:
   html:
