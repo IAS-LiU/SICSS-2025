@@ -108,7 +108,7 @@ class(mtx) # An array is a n-dimensional object
 dim(mtx) # Shows dimensions of the matrix. Here, we have a 7x7 matrix.
 
 # Usually, we would like to label the dimensions
-dimnames(mtx) <- list(c('Kira','Amaya','Rohan', 'Robin', 'Hanna', 'Adam', 'Igor'),c('Kira','Amaya','Rohan','David', 'Hanna', 'Adam', 'Igor'))
+dimnames(mtx) <- list(c('Kira','Amaya','Rohan', 'Robin', 'Hanna', 'Adam', 'Igor'),c('Kira','Amaya','Rohan','Robin', 'Hanna', 'Adam', 'Igor'))
 mtx
 
 # We can access each element of a matrix separately
