@@ -151,7 +151,7 @@ grph |>
 # Using the ggraph library
 set.seed(42)
 grph |> 
-  ggraph() +
+  ggraph(layout = "stress") +
   geom_edge_link() +
   geom_node_label(aes(label=name)) +
   theme_void() +
@@ -775,17 +775,20 @@ avg_friends_df <- merged_df |>
 avg_friends_df |> 
   slice_sample(n = 2000) |>
   ggplot(aes(x = ego_degree, y = avg_degree_neighbor)) +
-  geom_abline(slope = 1, 
-              intercept = 0, color = "darkgreen", linetype = "dashed") +
     stat_density_2d(aes(fill = after_stat(level)), geom = "polygon", alpha = 1)+
   geom_point(fill = NA, size = 3, alpha = 0.1, color = "black", 
              shape = 21, stroke = 1) +
+    geom_abline(slope = 1, 
+              intercept = 0, color = "darkred", linetype = "dashed", linewidth = 1) +
+  geom_smooth(method='lm', color = "pink", linetype = "dashed")+
   scale_x_log10(limits = c(1, 1000)) +
   scale_y_log10(limits = c(1, 250)) +
   labs(x = "Number of friends", 
        y = "Number of friends of the average neighbour",
        title = "Number of friendships",
       caption  = "Sample of 2000") +
+  annotate("text", x = 30, y = 200, label = "Theoretical equality", color = "darkred")+
+    annotate("text", x = 250, y = 30, label = "Observed correlation", color = "pink")+
   theme_minimal()+
   scale_fill_continuous(
     limits = c(0,1), 
