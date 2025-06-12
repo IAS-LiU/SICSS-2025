@@ -22,7 +22,7 @@ editor_options:
 ## Introduction & getting started
 
 Welcome to the practical part of the network analysis day! 
-In this session, you will get an introduction to how to represent a network with the help of R (or Python, see other script), how to calculate basic network descriptives (on the micro, meso and macro level), and how to put on the "network thinking hat". You are invited to work through the exercise sheet on your own/in groups, and with the help of mine and Carl where needed. If you are already familiar with some aspects of the lab, feel free to jump over certain sections or go straight to the exercise part. 
+In this session, you will get an introduction to how to represent a network with the help of R (or Python, see other script), how to calculate basic network descriptives (on the micro, meso and macro level), and how to put on the "network thinking hat". You are invited to work through the exercise sheet on your own/in groups, and with the help of ours where needed. If you are already familiar with some aspects of the lab, feel free to jump over certain sections or go straight to the exercise part. 
 
 
 **Learning goals for this workshop**
