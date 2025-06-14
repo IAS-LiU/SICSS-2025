@@ -15,3 +15,19 @@ All materials for the 2025 instance of SICSS at Norrköping.
 ### Day 5 Analysing Spatial Data
 - [lab materials](/05_spatial_data)
 - - [lecture slides](/05_spatial_data/lecture.html)
+
+## Potential datasources to work with 
+
+### For Networks
+
+- [Stanford Large Network Dataset Collection](https://snap.stanford.edu/data/)
+- [Network Repository](https://networkrepository.com/)
+- [Correlates of War](https://correlatesofwar.org/data-sets/)
+
+### For Text
+
+- [Early English Books Online](https://www.english-corpora.org/eebo/)
+- [Språkbanken](https://sprakbanken.se/)
+- [The ParlSpeech V2 Data Set](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/L4OAKN)
+- [Institutional Books](https://huggingface.co/datasets/institutional/institutional-books-1.0)
+- [Comparative Legislators Database](https://complegdatabase.com/)
