@@ -16,7 +16,7 @@ All materials for the 2025 instance of SICSS at Norrköping.
 - [lab materials](/05_spatial_data)
 - - [lecture slides](/05_spatial_data/lecture.html)
 
-## Potential datasources to work with 
+## Potential data sources to work with 
 
 ### For Networks
 
